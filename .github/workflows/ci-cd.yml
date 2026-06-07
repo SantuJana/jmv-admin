@@ -1,6 +1,7 @@
 name: CI/CD — Admin
 
 on:
+  workflow_dispatch:
   push:
     branches: [production]
   pull_request:
