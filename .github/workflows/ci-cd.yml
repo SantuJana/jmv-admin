@@ -44,6 +44,9 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      - name: Validate API base URL
+        run: test -n "${{ secrets.NEXT_PUBLIC_API_BASE_URL }}"
+
       - name: Build & push
         uses: docker/build-push-action@v5
         with:
@@ -55,7 +58,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+            NEXT_PUBLIC_API_BASE_URL=${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
 
   # ── Deploy Admin only — api stays running ────────────────────────────────
   deploy:
