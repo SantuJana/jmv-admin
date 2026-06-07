@@ -42,7 +42,7 @@ export default function LoginPage() {
           <img alt="JMV" className="size-12 rounded-xl object-contain" src="/logo.png" />
           <div>
             <h1 className="text-lg font-semibold">JMV Admin</h1>
-            <p className="text-sm text-muted-foreground">Sign in with an admin account</p>
+            <p className="text-sm text-muted-foreground">Sign in with an admin account:</p>
           </div>
         </div>
 
