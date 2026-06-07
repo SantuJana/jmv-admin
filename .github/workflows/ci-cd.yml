@@ -21,7 +21,7 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - run: npm run type-check
+      - run: npm run typecheck
       - run: npm run lint
       - run: npm test -- --passWithNoTests
 
@@ -54,7 +54,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
 
   # ── Deploy Admin only — api stays running ────────────────────────────────
   deploy:

@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start --port 3000",
     "lint": "eslint .",
+    "test": "echo \"No tests yet\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
