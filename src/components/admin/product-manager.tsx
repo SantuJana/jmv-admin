@@ -18,7 +18,9 @@ type Category = {
 type ProductVariant = {
   id: string;
   name: string;
+  mrp: string;
   price: string;
+  offerPrice?: string;
   stock: number;
   sku: string;
   unit: string;
@@ -53,7 +55,8 @@ type VariantFormState = {
   id?: string;
   productId: string;
   name: string;
-  price: string;
+  mrp: string;
+  offerPrice: string;
   stock: string;
   sku: string;
   unit: string;
@@ -73,7 +76,8 @@ const emptyProductForm: ProductFormState = {
 const emptyVariantForm: VariantFormState = {
   productId: "",
   name: "",
-  price: "",
+  mrp: "",
+  offerPrice: "",
   stock: "0",
   sku: "",
   unit: "",
@@ -217,7 +221,9 @@ export function ProductManager() {
     mutationFn: (payload: VariantFormState) => {
       const body = JSON.stringify({
         name: payload.name,
-        price: payload.price,
+        mrp: payload.mrp,
+        offerPrice: payload.offerPrice,
+        price: payload.offerPrice,
         stock: Number(payload.stock),
         sku: payload.sku,
         unit: payload.unit,
@@ -289,7 +295,8 @@ export function ProductManager() {
       id: variant.id,
       productId,
       name: variant.name,
-      price: variant.price,
+      mrp: variant.mrp,
+      offerPrice: variant.offerPrice ?? variant.price,
       stock: String(variant.stock),
       sku: variant.sku,
       unit: variant.unit,
@@ -501,7 +508,7 @@ export function ProductManager() {
       <section className="rounded-lg border bg-card p-5">
         <div className="mb-5">
           <h2 className="text-base font-semibold">Variants</h2>
-          <p className="text-sm text-muted-foreground">Manage price, stock, SKU, and units for a selected product.</p>
+          <p className="text-sm text-muted-foreground">Manage MRP, offer price, stock, SKU, and units for a selected product.</p>
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
@@ -547,14 +554,25 @@ export function ProductManager() {
               </label>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-4">
               <label className="block">
-                <span className="text-sm font-medium">Price</span>
+                <span className="text-sm font-medium">MRP</span>
                 <input
                   className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  value={variantForm.price}
-                  onChange={(event) => setVariantForm((current) => ({ ...current, price: event.target.value }))}
+                  value={variantForm.mrp}
+                  onChange={(event) => setVariantForm((current) => ({ ...current, mrp: event.target.value }))}
                   placeholder="120.00"
+                  required
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium">Offer price</span>
+                <input
+                  className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  value={variantForm.offerPrice}
+                  onChange={(event) => setVariantForm((current) => ({ ...current, offerPrice: event.target.value }))}
+                  placeholder="99.00"
                   required
                 />
               </label>
@@ -624,7 +642,8 @@ export function ProductManager() {
                     <div>
                       <p className="text-sm font-medium">{variant.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {variant.sku} · {variant.unit} · stock {variant.stock} · Rs. {variant.price}
+                        {variant.sku} · {variant.unit} · stock {variant.stock} · MRP Rs. {variant.mrp} · Offer Rs.{" "}
+                        {variant.offerPrice ?? variant.price}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

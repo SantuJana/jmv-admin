@@ -47,7 +47,9 @@ type Order = {
     sku: string;
     unit: string;
     quantity: number;
+    mrp: string;
     unitPrice: string;
+    offerPrice?: string;
     total: string;
   }>;
 };
@@ -251,6 +253,9 @@ export function OrderManager() {
                       <p className="truncate font-medium">{item.productName}</p>
                       <p className="truncate text-xs text-muted-foreground">
                         {item.variantName} · {item.sku} · qty {item.quantity}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        MRP Rs. {item.mrp} · Offer Rs. {item.offerPrice ?? item.unitPrice}
                       </p>
                     </div>
                     <p className="font-medium">Rs. {item.total}</p>
