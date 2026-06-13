@@ -6,7 +6,7 @@ import { FormEvent, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { ApiResponse } from "@/lib/api-client";
-import { buildAdminThumbnailUrl } from "@/lib/cloudinary-image";
+import { buildAdminThumbnailUrl } from "@/lib/object-storage-image";
 import { useAuth } from "@/providers/auth-provider";
 
 type Category = {
