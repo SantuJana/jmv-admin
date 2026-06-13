@@ -15,6 +15,12 @@ type Category = {
   slug: string;
   imageUrl: string | null;
   imagePublicId: string | null;
+  imageUrls?: {
+    original: string | null;
+    thumbnail: string | null;
+    card: string | null;
+    detail: string | null;
+  };
   isActive: boolean;
   productsCount: number;
 };
@@ -162,8 +168,8 @@ export function CategoryManager() {
   const isSaving = saveMutation.isPending || uploadMutation.isPending;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
-      <form className="rounded-lg border bg-card p-5" onSubmit={handleSubmit}>
+    <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+      <form className="min-w-0 rounded-lg border bg-card p-5" onSubmit={handleSubmit}>
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">{form.id ? "Edit Category" : "New Category"}</h2>
@@ -205,8 +211,8 @@ export function CategoryManager() {
 
           <label className="block">
             <span className="text-sm font-medium">Image</span>
-            <div className="mt-1 flex items-center gap-3">
-              <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
+            <div className="mt-1 flex min-w-0 max-w-full items-center gap-3 overflow-hidden">
+              <label className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
                 <ImagePlus className="size-4" />
                 Choose
                 <input
@@ -216,7 +222,10 @@ export function CategoryManager() {
                   onChange={(event) => setSelectedImage(event.target.files?.[0] ?? null)}
                 />
               </label>
-              <span className="min-w-0 truncate text-sm text-muted-foreground">
+              <span
+                className="block min-w-0 flex-1 basis-0 truncate rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground"
+                title={selectedImage?.name ?? form.imagePublicId ?? "No image selected"}
+              >
                 {selectedImage?.name ?? form.imagePublicId ?? "No image selected"}
               </span>
             </div>
@@ -240,7 +249,7 @@ export function CategoryManager() {
         </div>
       </form>
 
-      <section className="rounded-lg border bg-card">
+      <section className="min-w-0 rounded-lg border bg-card">
         <div className="flex items-center justify-between gap-3 border-b p-5">
           <div>
             <h2 className="text-base font-semibold">Categories</h2>
@@ -259,9 +268,13 @@ export function CategoryManager() {
               <div key={category.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
-                    {category.imageUrl ? (
+                    {category.imageUrls?.thumbnail ?? category.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img alt="" className="size-full object-cover" src={buildAdminThumbnailUrl(category.imageUrl)} />
+                      <img
+                        alt=""
+                        className="size-full object-cover"
+                        src={buildAdminThumbnailUrl(category.imageUrls?.thumbnail ?? category.imageUrl)}
+                      />
                     ) : (
                       <ImagePlus className="size-4 text-muted-foreground" />
                     )}

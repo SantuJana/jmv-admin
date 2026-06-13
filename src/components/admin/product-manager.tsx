@@ -35,6 +35,12 @@ type Product = {
   description: string | null;
   imageUrl: string | null;
   imagePublicId: string | null;
+  imageUrls?: {
+    original: string | null;
+    thumbnail: string | null;
+    card: string | null;
+    detail: string | null;
+  };
   isActive: boolean;
   category: Category;
   variants: ProductVariant[];
@@ -320,9 +326,9 @@ export function ProductManager() {
     <div className="space-y-5">
       {error ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
 
-      <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <form
-          className="rounded-lg border bg-card p-5 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
+          className="min-w-0 rounded-lg border bg-card p-5 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
           onSubmit={handleProductSubmit}
         >
           <div className="mb-5 flex items-start justify-between gap-3">
@@ -392,8 +398,8 @@ export function ProductManager() {
 
             <label className="block">
               <span className="text-sm font-medium">Image</span>
-              <div className="mt-1 flex items-center gap-3">
-                <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
+              <div className="mt-1 flex min-w-0 max-w-full items-center gap-3 overflow-hidden">
+                <label className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
                   <ImagePlus className="size-4" />
                   Choose
                   <input
@@ -403,7 +409,10 @@ export function ProductManager() {
                     onChange={(event) => setSelectedImage(event.target.files?.[0] ?? null)}
                   />
                 </label>
-                <span className="min-w-0 truncate text-sm text-muted-foreground">
+                <span
+                  className="block min-w-0 flex-1 basis-0 truncate rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground"
+                  title={selectedImage?.name ?? productForm.imagePublicId ?? "No image selected"}
+                >
                   {selectedImage?.name ?? productForm.imagePublicId ?? "No image selected"}
                 </span>
               </div>
@@ -425,7 +434,7 @@ export function ProductManager() {
           </div>
         </form>
 
-        <section className="rounded-lg border bg-card">
+        <section className="min-w-0 rounded-lg border bg-card">
           <div className="space-y-3 border-b p-5">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -466,9 +475,13 @@ export function ProductManager() {
                 <div key={product.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
-                      {product.imageUrl ? (
+                      {product.imageUrls?.thumbnail ?? product.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img alt="" className="size-full object-cover" src={buildAdminThumbnailUrl(product.imageUrl)} />
+                        <img
+                          alt=""
+                          className="size-full object-cover"
+                          src={buildAdminThumbnailUrl(product.imageUrls?.thumbnail ?? product.imageUrl)}
+                        />
                       ) : (
                         <ImagePlus className="size-4 text-muted-foreground" />
                       )}
