@@ -41,9 +41,17 @@ type Product = {
     card: string | null;
     detail: string | null;
   };
+  detailImages?: ProductDetailImage[];
   isActive: boolean;
   category: Category;
   variants: ProductVariant[];
+};
+
+type ProductDetailImage = {
+  id?: string;
+  imageUrl: string;
+  imagePublicId: string;
+  sortOrder: number;
 };
 
 type ProductFormState = {
@@ -54,6 +62,7 @@ type ProductFormState = {
   description: string;
   imageUrl: string;
   imagePublicId: string;
+  detailImages: ProductDetailImage[];
   isActive: boolean;
 };
 
@@ -76,6 +85,7 @@ const emptyProductForm: ProductFormState = {
   description: "",
   imageUrl: "",
   imagePublicId: "",
+  detailImages: [],
   isActive: true
 };
 
@@ -104,6 +114,7 @@ export function ProductManager() {
   const [productForm, setProductForm] = useState<ProductFormState>(emptyProductForm);
   const [variantForm, setVariantForm] = useState<VariantFormState>(emptyVariantForm);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [selectedDetailImages, setSelectedDetailImages] = useState<File[]>([]);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -166,6 +177,25 @@ export function ProductManager() {
     }
   });
 
+  const uploadDetailImageMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const body = new FormData();
+      body.append("image", file);
+      body.append("folder", "jmv/products/details");
+
+      const response = await authorizedRequest<ApiResponse<{ image: { imageUrl: string; imagePublicId: string } }>>(
+        "/uploads/product-detail-image",
+        {
+          method: "POST",
+          body,
+          isFormData: true
+        }
+      );
+
+      return response.data.image;
+    }
+  });
+
   const saveProductMutation = useMutation({
     mutationFn: async (payload: ProductFormState) => {
       let imageUrl = payload.imageUrl || undefined;
@@ -177,6 +207,22 @@ export function ProductManager() {
         imagePublicId = uploadedImage.imagePublicId;
       }
 
+      const uploadedDetailImages = await Promise.all(
+        selectedDetailImages.map((file) => uploadDetailImageMutation.mutateAsync(file))
+      );
+      const detailImages = [
+        ...payload.detailImages,
+        ...uploadedDetailImages.map((image) => ({
+          imageUrl: image.imageUrl,
+          imagePublicId: image.imagePublicId,
+          sortOrder: 0
+        }))
+      ].map((image, index) => ({
+        imageUrl: image.imageUrl,
+        imagePublicId: image.imagePublicId,
+        sortOrder: index
+      }));
+
       const body = JSON.stringify({
         categoryId: payload.categoryId,
         name: payload.name,
@@ -184,6 +230,7 @@ export function ProductManager() {
         description: payload.description || undefined,
         imageUrl,
         imagePublicId,
+        detailImages,
         isActive: payload.isActive
       });
 
@@ -272,11 +319,12 @@ export function ProductManager() {
   });
 
   const selectedProduct = productsQuery.data?.find((product) => product.id === variantForm.productId) ?? null;
-  const isSavingProduct = saveProductMutation.isPending || uploadMutation.isPending;
+  const isSavingProduct = saveProductMutation.isPending || uploadMutation.isPending || uploadDetailImageMutation.isPending;
 
   function resetProductForm() {
     setProductForm(emptyProductForm);
     setSelectedImage(null);
+    setSelectedDetailImages([]);
   }
 
   const startProductEdit = (product: Product) => {
@@ -290,6 +338,11 @@ export function ProductManager() {
       description: product.description ?? "",
       imageUrl: product.imageUrl ?? "",
       imagePublicId: product.imagePublicId ?? "",
+      detailImages: (product.detailImages ?? []).map((image, index) => ({
+        imageUrl: image.imageUrl,
+        imagePublicId: image.imagePublicId,
+        sortOrder: image.sortOrder ?? index
+      })),
       isActive: product.isActive
     });
     setVariantForm((current) => ({ ...current, productId: product.id }));
@@ -416,6 +469,74 @@ export function ProductManager() {
                   {selectedImage?.name ?? productForm.imagePublicId ?? "No image selected"}
                 </span>
               </div>
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">Detail Images</span>
+              <div className="mt-1 flex min-w-0 max-w-full items-center gap-3 overflow-hidden">
+                <label className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
+                  <ImagePlus className="size-4" />
+                  Add
+                  <input
+                    className="hidden"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    multiple
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files ?? []);
+                      setSelectedDetailImages((current) => [...current, ...files]);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <span className="block min-w-0 flex-1 basis-0 truncate rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  {productForm.detailImages.length + selectedDetailImages.length} detail images
+                </span>
+              </div>
+              {productForm.detailImages.length || selectedDetailImages.length ? (
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {productForm.detailImages.map((image) => (
+                    <div key={image.imagePublicId} className="relative aspect-square overflow-hidden rounded-md border bg-muted">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        alt=""
+                        className="size-full object-cover"
+                        src={buildAdminThumbnailUrl(image.imageUrl)}
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-1 top-1 inline-flex size-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm"
+                        onClick={() =>
+                          setProductForm((current) => ({
+                            ...current,
+                            detailImages: current.detailImages.filter(
+                              (currentImage) => currentImage.imagePublicId !== image.imagePublicId
+                            )
+                          }))
+                        }
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {selectedDetailImages.map((file, index) => (
+                    <div key={`${file.name}-${file.lastModified}-${index}`} className="relative aspect-square overflow-hidden rounded-md border bg-muted">
+                      <div className="flex size-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
+                        <span className="line-clamp-3 break-all">{file.name}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="absolute right-1 top-1 inline-flex size-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm"
+                        onClick={() =>
+                          setSelectedDetailImages((current) => current.filter((_, fileIndex) => fileIndex !== index))
+                        }
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </label>
 
             <label className="flex items-center gap-2 text-sm">
