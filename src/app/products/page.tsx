@@ -8,10 +8,10 @@ export default function ProductsPage() {
     <AdminShell>
       <div className="mb-6">
         <h2 className="text-xl font-semibold">Products</h2>
-        <p className="text-sm text-muted-foreground">Create products, upload images, and manage variants.</p>
+        <p className="text-sm text-muted-foreground">Create products, upload images, and keep catalog details tidy.</p>
       </div>
 
-      <ProductManager />
+      <ProductManager view="products" />
     </AdminShell>
   );
 }

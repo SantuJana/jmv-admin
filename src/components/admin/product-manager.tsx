@@ -1,8 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { ImagePlus, Layers3, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { ApiResponse } from "@/lib/api-client";
@@ -24,6 +25,15 @@ type ProductVariant = {
   stock: number;
   sku: string;
   unit: string;
+  imageUrl: string | null;
+  imagePublicId: string | null;
+  imageUrls?: {
+    original: string | null;
+    thumbnail: string | null;
+    card: string | null;
+    detail: string | null;
+  };
+  detailImages?: ProductDetailImage[];
   isActive: boolean;
 };
 
@@ -41,9 +51,17 @@ type Product = {
     card: string | null;
     detail: string | null;
   };
+  detailImages?: ProductDetailImage[];
   isActive: boolean;
   category: Category;
   variants: ProductVariant[];
+};
+
+type ProductDetailImage = {
+  id?: string;
+  imageUrl: string;
+  imagePublicId: string;
+  sortOrder: number;
 };
 
 type ProductFormState = {
@@ -54,6 +72,7 @@ type ProductFormState = {
   description: string;
   imageUrl: string;
   imagePublicId: string;
+  detailImages: ProductDetailImage[];
   isActive: boolean;
 };
 
@@ -66,6 +85,9 @@ type VariantFormState = {
   stock: string;
   sku: string;
   unit: string;
+  imageUrl: string;
+  imagePublicId: string;
+  detailImages: ProductDetailImage[];
   isActive: boolean;
 };
 
@@ -76,6 +98,7 @@ const emptyProductForm: ProductFormState = {
   description: "",
   imageUrl: "",
   imagePublicId: "",
+  detailImages: [],
   isActive: true
 };
 
@@ -87,6 +110,9 @@ const emptyVariantForm: VariantFormState = {
   stock: "0",
   sku: "",
   unit: "",
+  imageUrl: "",
+  imagePublicId: "",
+  detailImages: [],
   isActive: true
 };
 
@@ -98,12 +124,31 @@ const toSlug = (value: string) =>
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
 
-export function ProductManager() {
+const getImageLabel = (value: string | null | undefined, fallback: string) => {
+  if (!value) {
+    return fallback;
+  }
+
+  const normalizedValue = value.split("?")[0].replace(/\/+$/g, "");
+  const lastSegment = normalizedValue.split("/").pop();
+
+  return lastSegment || value;
+};
+
+type ProductManagerProps = {
+  view?: "products" | "variants";
+};
+
+export function ProductManager({ view = "products" }: ProductManagerProps) {
   const queryClient = useQueryClient();
   const { authorizedRequest, token } = useAuth();
   const [productForm, setProductForm] = useState<ProductFormState>(emptyProductForm);
   const [variantForm, setVariantForm] = useState<VariantFormState>(emptyVariantForm);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [selectedDetailImages, setSelectedDetailImages] = useState<File[]>([]);
+  const [selectedVariantImage, setSelectedVariantImage] = useState<File | null>(null);
+  const [selectedVariantDetailImages, setSelectedVariantDetailImages] = useState<File[]>([]);
+  const [linkedProductId, setLinkedProductId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -166,6 +211,63 @@ export function ProductManager() {
     }
   });
 
+  const uploadDetailImageMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const body = new FormData();
+      body.append("image", file);
+      body.append("folder", "jmv/products/details");
+
+      const response = await authorizedRequest<ApiResponse<{ image: { imageUrl: string; imagePublicId: string } }>>(
+        "/uploads/product-detail-image",
+        {
+          method: "POST",
+          body,
+          isFormData: true
+        }
+      );
+
+      return response.data.image;
+    }
+  });
+
+  const uploadVariantImageMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const body = new FormData();
+      body.append("image", file);
+      body.append("folder", "jmv/products/variants");
+
+      const response = await authorizedRequest<ApiResponse<{ image: { imageUrl: string; imagePublicId: string } }>>(
+        "/uploads/image",
+        {
+          method: "POST",
+          body,
+          isFormData: true
+        }
+      );
+
+      return response.data.image;
+    }
+  });
+
+  const uploadVariantDetailImageMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const body = new FormData();
+      body.append("image", file);
+      body.append("folder", "jmv/products/variants/details");
+
+      const response = await authorizedRequest<ApiResponse<{ image: { imageUrl: string; imagePublicId: string } }>>(
+        "/uploads/product-detail-image",
+        {
+          method: "POST",
+          body,
+          isFormData: true
+        }
+      );
+
+      return response.data.image;
+    }
+  });
+
   const saveProductMutation = useMutation({
     mutationFn: async (payload: ProductFormState) => {
       let imageUrl = payload.imageUrl || undefined;
@@ -177,6 +279,22 @@ export function ProductManager() {
         imagePublicId = uploadedImage.imagePublicId;
       }
 
+      const uploadedDetailImages = await Promise.all(
+        selectedDetailImages.map((file) => uploadDetailImageMutation.mutateAsync(file))
+      );
+      const detailImages = [
+        ...payload.detailImages,
+        ...uploadedDetailImages.map((image) => ({
+          imageUrl: image.imageUrl,
+          imagePublicId: image.imagePublicId,
+          sortOrder: 0
+        }))
+      ].map((image, index) => ({
+        imageUrl: image.imageUrl,
+        imagePublicId: image.imagePublicId,
+        sortOrder: index
+      }));
+
       const body = JSON.stringify({
         categoryId: payload.categoryId,
         name: payload.name,
@@ -184,6 +302,7 @@ export function ProductManager() {
         description: payload.description || undefined,
         imageUrl,
         imagePublicId,
+        detailImages,
         isActive: payload.isActive
       });
 
@@ -224,7 +343,32 @@ export function ProductManager() {
   });
 
   const saveVariantMutation = useMutation({
-    mutationFn: (payload: VariantFormState) => {
+    mutationFn: async (payload: VariantFormState) => {
+      let imageUrl: string | null = payload.imageUrl || null;
+      let imagePublicId: string | null = payload.imagePublicId || null;
+
+      if (selectedVariantImage) {
+        const uploadedImage = await uploadVariantImageMutation.mutateAsync(selectedVariantImage);
+        imageUrl = uploadedImage.imageUrl;
+        imagePublicId = uploadedImage.imagePublicId;
+      }
+
+      const uploadedVariantDetailImages = await Promise.all(
+        selectedVariantDetailImages.map((file) => uploadVariantDetailImageMutation.mutateAsync(file))
+      );
+      const detailImages = [
+        ...payload.detailImages,
+        ...uploadedVariantDetailImages.map((image) => ({
+          imageUrl: image.imageUrl,
+          imagePublicId: image.imagePublicId,
+          sortOrder: 0
+        }))
+      ].map((image, index) => ({
+        imageUrl: image.imageUrl,
+        imagePublicId: image.imagePublicId,
+        sortOrder: index
+      }));
+
       const body = JSON.stringify({
         name: payload.name,
         mrp: payload.mrp,
@@ -233,6 +377,9 @@ export function ProductManager() {
         stock: Number(payload.stock),
         sku: payload.sku,
         unit: payload.unit,
+        imageUrl,
+        imagePublicId,
+        detailImages,
         isActive: payload.isActive
       });
 
@@ -249,7 +396,7 @@ export function ProductManager() {
       });
     },
     onSuccess: async () => {
-      setVariantForm((current) => ({ ...emptyVariantForm, productId: current.productId }));
+      resetVariantForm(variantForm.productId);
       setError(null);
       await queryClient.invalidateQueries({ queryKey: ["products"] });
     },
@@ -272,11 +419,46 @@ export function ProductManager() {
   });
 
   const selectedProduct = productsQuery.data?.find((product) => product.id === variantForm.productId) ?? null;
-  const isSavingProduct = saveProductMutation.isPending || uploadMutation.isPending;
+  const isSavingProduct = saveProductMutation.isPending || uploadMutation.isPending || uploadDetailImageMutation.isPending;
+  const isSavingVariant =
+    saveVariantMutation.isPending || uploadVariantImageMutation.isPending || uploadVariantDetailImageMutation.isPending;
+  const productsError = productsQuery.error instanceof Error ? productsQuery.error.message : null;
+
+  useEffect(() => {
+    if (view !== "variants") {
+      return;
+    }
+
+    const productsData = productsQuery.data ?? [];
+    const nextProductId = linkedProductId && productsData.some((product) => product.id === linkedProductId)
+      ? linkedProductId
+      : productsData[0]?.id;
+
+    if (nextProductId && variantForm.productId !== nextProductId) {
+      setVariantForm({ ...emptyVariantForm, productId: nextProductId });
+      setSelectedVariantImage(null);
+      setSelectedVariantDetailImages([]);
+    }
+  }, [linkedProductId, productsQuery.data, variantForm.productId, view]);
+
+  useEffect(() => {
+    if (view !== "variants") {
+      return;
+    }
+
+    setLinkedProductId(new URLSearchParams(window.location.search).get("productId"));
+  }, [view]);
 
   function resetProductForm() {
     setProductForm(emptyProductForm);
     setSelectedImage(null);
+    setSelectedDetailImages([]);
+  }
+
+  function resetVariantForm(productId = variantForm.productId) {
+    setVariantForm({ ...emptyVariantForm, productId });
+    setSelectedVariantImage(null);
+    setSelectedVariantDetailImages([]);
   }
 
   const startProductEdit = (product: Product) => {
@@ -290,9 +472,14 @@ export function ProductManager() {
       description: product.description ?? "",
       imageUrl: product.imageUrl ?? "",
       imagePublicId: product.imagePublicId ?? "",
+      detailImages: (product.detailImages ?? []).map((image, index) => ({
+        imageUrl: image.imageUrl,
+        imagePublicId: image.imagePublicId,
+        sortOrder: image.sortOrder ?? index
+      })),
       isActive: product.isActive
     });
-    setVariantForm((current) => ({ ...current, productId: product.id }));
+    resetVariantForm(product.id);
   };
 
   const startVariantEdit = (variant: ProductVariant, productId: string) => {
@@ -306,8 +493,17 @@ export function ProductManager() {
       stock: String(variant.stock),
       sku: variant.sku,
       unit: variant.unit,
+      imageUrl: variant.imageUrl ?? "",
+      imagePublicId: variant.imagePublicId ?? "",
+      detailImages: (variant.detailImages ?? []).map((image, index) => ({
+        imageUrl: image.imageUrl,
+        imagePublicId: image.imagePublicId,
+        sortOrder: image.sortOrder ?? index
+      })),
       isActive: variant.isActive
     });
+    setSelectedVariantImage(null);
+    setSelectedVariantDetailImages([]);
   };
 
   const handleProductSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -326,6 +522,7 @@ export function ProductManager() {
     <div className="space-y-5">
       {error ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
 
+      {view === "products" ? (
       <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <form
           className="min-w-0 rounded-lg border bg-card p-5 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
@@ -398,7 +595,7 @@ export function ProductManager() {
 
             <label className="block">
               <span className="text-sm font-medium">Image</span>
-              <div className="mt-1 flex min-w-0 max-w-full items-center gap-3 overflow-hidden">
+              <div className="mt-1 grid min-w-0 max-w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden">
                 <label className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
                   <ImagePlus className="size-4" />
                   Choose
@@ -416,6 +613,74 @@ export function ProductManager() {
                   {selectedImage?.name ?? productForm.imagePublicId ?? "No image selected"}
                 </span>
               </div>
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">Detail Images</span>
+              <div className="mt-1 flex min-w-0 max-w-full items-center gap-3 overflow-hidden">
+                <label className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
+                  <ImagePlus className="size-4" />
+                  Add
+                  <input
+                    className="hidden"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    multiple
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files ?? []);
+                      setSelectedDetailImages((current) => [...current, ...files]);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <span className="block min-w-0 flex-1 basis-0 truncate rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  {productForm.detailImages.length + selectedDetailImages.length} detail images
+                </span>
+              </div>
+              {productForm.detailImages.length || selectedDetailImages.length ? (
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {productForm.detailImages.map((image) => (
+                    <div key={image.imagePublicId} className="relative aspect-square overflow-hidden rounded-md border bg-muted">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        alt=""
+                        className="size-full object-cover"
+                        src={buildAdminThumbnailUrl(image.imageUrl)}
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-1 top-1 inline-flex size-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm"
+                        onClick={() =>
+                          setProductForm((current) => ({
+                            ...current,
+                            detailImages: current.detailImages.filter(
+                              (currentImage) => currentImage.imagePublicId !== image.imagePublicId
+                            )
+                          }))
+                        }
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {selectedDetailImages.map((file, index) => (
+                    <div key={`${file.name}-${file.lastModified}-${index}`} className="relative aspect-square overflow-hidden rounded-md border bg-muted">
+                      <div className="flex size-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
+                        <span className="line-clamp-3 break-all">{file.name}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="absolute right-1 top-1 inline-flex size-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm"
+                        onClick={() =>
+                          setSelectedDetailImages((current) => current.filter((_, fileIndex) => fileIndex !== index))
+                        }
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </label>
 
             <label className="flex items-center gap-2 text-sm">
@@ -471,8 +736,17 @@ export function ProductManager() {
             ) : products.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted-foreground">No products found.</div>
             ) : (
-              products.map((product) => (
-                <div key={product.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              products.map((product) => {
+                const isSelectedForVariants = selectedProduct?.id === product.id;
+
+                return (
+                <div
+                  key={product.id}
+                  className={[
+                    "flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between",
+                    isSelectedForVariants ? "bg-primary/5 ring-1 ring-inset ring-primary/20" : ""
+                  ].join(" ")}
+                >
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
                       {product.imageUrls?.thumbnail ?? product.imageUrl ? (
@@ -494,17 +768,30 @@ export function ProductManager() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
                       {product.isActive ? "Active" : "Inactive"}
                     </span>
-                    <Button type="button" variant="outline" size="icon" onClick={() => startProductEdit(product)}>
+                    <Button asChild variant="outline" size="sm" className="gap-2" title="Manage variants">
+                      <Link href={`/products/variants?productId=${product.id}`}>
+                        <Layers3 className="size-4" />
+                        Variants
+                      </Link>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      title="Edit product"
+                      onClick={() => startProductEdit(product)}
+                    >
                       <Pencil className="size-4" />
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       size="icon"
+                      title="Delete product"
                       disabled={deleteProductMutation.isPending}
                       onClick={() => deleteProductMutation.mutate(product.id)}
                     >
@@ -512,18 +799,44 @@ export function ProductManager() {
                     </Button>
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>
       </div>
+      ) : null}
 
+      {view === "variants" ? (
       <section className="rounded-lg border bg-card p-5">
-        <div className="mb-5">
-          <h2 className="text-base font-semibold">Variants</h2>
-          <p className="text-sm text-muted-foreground">Manage MRP, offer price, stock, SKU, and units for a selected product.</p>
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold">Variants</h2>
+            <p className="truncate text-sm text-muted-foreground">
+              {selectedProduct ? `${selectedProduct.name} · ${selectedProduct.variants.length} variants` : "Select a product"}
+            </p>
+          </div>
+          {selectedProduct ? (
+            <Button type="button" variant="outline" className="gap-2" onClick={() => resetVariantForm(selectedProduct.id)}>
+              <Plus className="size-4" />
+              New Variant
+            </Button>
+          ) : null}
         </div>
 
+        {productsQuery.isLoading ? (
+          <div className="rounded-md border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+            Loading products...
+          </div>
+        ) : productsQuery.isError ? (
+          <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {productsError ?? "Products could not be loaded"}
+          </div>
+        ) : (productsQuery.data ?? []).length === 0 ? (
+          <div className="rounded-md border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+            Create a product before adding variants.
+          </div>
+        ) : (
         <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
           <form className="space-y-4 lg:sticky lg:top-24 lg:self-start" onSubmit={handleVariantSubmit}>
             <label className="block">
@@ -531,7 +844,7 @@ export function ProductManager() {
               <select
                 className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                 value={variantForm.productId}
-                onChange={(event) => setVariantForm((current) => ({ ...current, productId: event.target.value }))}
+                onChange={(event) => resetVariantForm(event.target.value)}
                 required
               >
                 <option value="">Select product</option>
@@ -614,6 +927,106 @@ export function ProductManager() {
               </label>
             </div>
 
+            <label className="block">
+              <span className="text-sm font-medium">Variant Image</span>
+              <div className="mt-1 grid min-w-0 max-w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden">
+                <label className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
+                  <ImagePlus className="size-4" />
+                  Choose
+                  <input
+                    className="hidden"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    onChange={(event) => setSelectedVariantImage(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                <span
+                  className="block h-10 min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground"
+                  title={selectedVariantImage?.name ?? variantForm.imagePublicId ?? "Use product image"}
+                >
+                  {selectedVariantImage?.name ?? getImageLabel(variantForm.imagePublicId, "Use product image")}
+                </span>
+              </div>
+              {variantForm.imageUrl || selectedVariantImage ? (
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-medium text-destructive"
+                  onClick={() => {
+                    setSelectedVariantImage(null);
+                    setVariantForm((current) => ({ ...current, imageUrl: "", imagePublicId: "" }));
+                  }}
+                >
+                  Remove variant image
+                </button>
+              ) : null}
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">Variant Detail Images</span>
+              <div className="mt-1 grid min-w-0 max-w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden">
+                <label className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
+                  <ImagePlus className="size-4" />
+                  Add
+                  <input
+                    className="hidden"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    multiple
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files ?? []);
+                      setSelectedVariantDetailImages((current) => [...current, ...files]);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <span className="block h-10 min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  {variantForm.detailImages.length + selectedVariantDetailImages.length} detail images
+                </span>
+              </div>
+              {variantForm.detailImages.length || selectedVariantDetailImages.length ? (
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {variantForm.detailImages.map((image) => (
+                    <div key={image.imagePublicId} className="relative aspect-square overflow-hidden rounded-md border bg-muted">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img alt="" className="size-full object-cover" src={buildAdminThumbnailUrl(image.imageUrl)} />
+                      <button
+                        type="button"
+                        className="absolute right-1 top-1 inline-flex size-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm"
+                        onClick={() =>
+                          setVariantForm((current) => ({
+                            ...current,
+                            detailImages: current.detailImages.filter(
+                              (currentImage) => currentImage.imagePublicId !== image.imagePublicId
+                            )
+                          }))
+                        }
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {selectedVariantDetailImages.map((file, index) => (
+                    <div key={`${file.name}-${file.lastModified}-${index}`} className="relative aspect-square overflow-hidden rounded-md border bg-muted">
+                      <div className="flex size-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
+                        <span className="line-clamp-3 break-all">{file.name}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="absolute right-1 top-1 inline-flex size-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm"
+                        onClick={() =>
+                          setSelectedVariantDetailImages((current) =>
+                            current.filter((_, fileIndex) => fileIndex !== index)
+                          )
+                        }
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </label>
+
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -624,15 +1037,15 @@ export function ProductManager() {
             </label>
 
             <div className="flex gap-2">
-              <Button className="flex-1 gap-2" type="submit" disabled={saveVariantMutation.isPending}>
-                {saveVariantMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              <Button className="flex-1 gap-2" type="submit" disabled={isSavingVariant}>
+                {isSavingVariant ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
                 {variantForm.id ? "Save Variant" : "Add Variant"}
               </Button>
               {variantForm.id ? (
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setVariantForm((current) => ({ ...emptyVariantForm, productId: current.productId }))}
+                  onClick={() => resetVariantForm()}
                 >
                   Cancel
                 </Button>
@@ -652,12 +1065,31 @@ export function ProductManager() {
               ) : (
                 selectedProduct.variants.map((variant) => (
                   <div key={variant.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm font-medium">{variant.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {variant.sku} · {variant.unit} · stock {variant.stock} · MRP Rs. {variant.mrp} · Offer Rs.{" "}
-                        {variant.offerPrice ?? variant.price}
-                      </p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
+                        {variant.imageUrl ?? variant.imageUrls?.thumbnail ?? selectedProduct.imageUrls?.thumbnail ?? selectedProduct.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            alt=""
+                            className="size-full object-cover"
+                            src={buildAdminThumbnailUrl(
+                              variant.imageUrl ??
+                                variant.imageUrls?.thumbnail ??
+                                selectedProduct.imageUrls?.thumbnail ??
+                                selectedProduct.imageUrl
+                            )}
+                          />
+                        ) : (
+                          <ImagePlus className="size-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{variant.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {variant.sku} · {variant.unit} · stock {variant.stock} · MRP Rs. {variant.mrp} · Offer Rs.{" "}
+                          {variant.offerPrice ?? variant.price}
+                        </p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
@@ -667,6 +1099,7 @@ export function ProductManager() {
                         type="button"
                         variant="outline"
                         size="icon"
+                        title="Edit variant"
                         onClick={() => startVariantEdit(variant, selectedProduct.id)}
                       >
                         <Pencil className="size-4" />
@@ -675,6 +1108,7 @@ export function ProductManager() {
                         type="button"
                         variant="outline"
                         size="icon"
+                        title="Delete variant"
                         disabled={deleteVariantMutation.isPending}
                         onClick={() => deleteVariantMutation.mutate(variant.id)}
                       >
@@ -687,7 +1121,9 @@ export function ProductManager() {
             </div>
           </div>
         </div>
+        )}
       </section>
+      ) : null}
     </div>
   );
 }

@@ -29,7 +29,13 @@ const navItems = [
   {
     href: "/products",
     label: "Products",
-    icon: Package
+    icon: Package,
+    children: [
+      {
+        href: "/products/variants",
+        label: "Variants"
+      }
+    ]
   },
   {
     href: "/orders",
@@ -87,20 +93,42 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
           <nav className="space-y-1">
             {navItems.map((item) => {
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || item.children?.some((child) => pathname === child.href);
 
               return (
-                <Button
-                  key={item.href}
-                  asChild
-                  className={cn("w-full justify-start gap-2", isActive && "bg-secondary text-secondary-foreground")}
-                  variant={isActive ? "secondary" : "ghost"}
-                >
-                  <Link href={item.href}>
-                    <item.icon className="size-4" />
-                    {item.label}
-                  </Link>
-                </Button>
+                <div key={item.href}>
+                  <Button
+                    asChild
+                    className={cn("w-full justify-start gap-2", isActive && "bg-secondary text-secondary-foreground")}
+                    variant={isActive ? "secondary" : "ghost"}
+                  >
+                    <Link href={item.href}>
+                      <item.icon className="size-4" />
+                      {item.label}
+                    </Link>
+                  </Button>
+                  {item.children && isActive ? (
+                    <div className="mt-1 space-y-1 pl-8">
+                      {item.children.map((child) => {
+                        const isChildActive = pathname === child.href;
+
+                        return (
+                          <Button
+                            key={child.href}
+                            asChild
+                            className={cn(
+                              "h-8 w-full justify-start px-3 text-xs",
+                              isChildActive && "bg-muted text-foreground"
+                            )}
+                            variant="ghost"
+                          >
+                            <Link href={child.href}>{child.label}</Link>
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
               );
             })}
           </nav>
